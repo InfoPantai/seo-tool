@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEO Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            max-width: 600px;
+            margin: auto;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+        }
+        .result h2 {
+            font-size: 18px;
+            color: #555;
+        }
+        .result ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .result ul li {
+            background: #f9f9f9;
+            margin: 5px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .spinner {
+            display: none;
+            margin: 20px auto;
+            text-align: center;
+        }
+        .spinner div {
+            width: 40px;
+            height: 40px;
+            margin: auto;
+            border: 4px solid #007BFF;
+            border-top: 4px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>SEO Tool</h1>
+    <form id="seoForm">
+        <input type="text" id="query" placeholder="Enter keyword" required>
+        <button type="submit">Search</button>
+    </form>
+    <!-- Spinner for Loading -->
+    <div class="spinner" id="spinner">
+        <div></div>
+        <p>Loading... Please wait.</p>
+    </div>
+    <div class="result" id="results"></div>
+
+   <script>
+    document.getElementById('seoForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const query = document.getElementById('query').value;
+        if (!query) {
+            alert('Please enter a keyword!');
+            return;
+        }
+
+        // Show spinner
+        const spinner = document.getElementById('spinner');
+        spinner.style.display = 'block';
+
+        // Clear previous results
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = '';
+
+        try {
+            // Get Google Suggest with long-tail keywords and PAA
+            const suggestRes = await fetch(`/api/suggest?query=${encodeURIComponent(query)}`);
+            const suggestData = await suggestRes.json();
+
+            // Hide spinner
+            spinner.style.display = 'none';
+
+            if (suggestData.results) {
+                // Add "Download All Results (Single File)" button
+                const downloadAllButtonTop = document.createElement('button');
+                downloadAllButtonTop.textContent = 'Download All Results (Single File)';
+                downloadAllButtonTop.style.marginBottom = '20px';
+                downloadAllButtonTop.onclick = async () => {
+                    await downloadAllResults(suggestData.results);
+                };
+                resultsDiv.appendChild(downloadAllButtonTop);
+
+                // Show results
+                suggestData.results.forEach(item => {
+                    const suggestTitle = document.createElement('h2');
+                    suggestTitle.textContent = item.suggestion;
+                    resultsDiv.appendChild(suggestTitle);
+
+                    // Long-tail keywords
+                    const longTailList = document.createElement('ul');
+                    item.long_tails.forEach(longTail => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = longTail;
+                        longTailList.appendChild(listItem);
+                    });
+                    resultsDiv.appendChild(longTailList);
+
+                    // People Also Ask
+                    if (item.paa && item.paa.length > 0) {
+                        const paaTitle = document.createElement('h3');
+                        paaTitle.textContent = 'People Also Ask:';
+                        resultsDiv.appendChild(paaTitle);
+
+                        const paaList = document.createElement('ul');
+                        item.paa.forEach(paa => {
+                            const paaItem = document.createElement('li');
+                            paaItem.textContent = paa;
+                            paaList.appendChild(paaItem);
+                        });
+                        resultsDiv.appendChild(paaList);
+                    }
+
+                    // Download Button
+                    const downloadButton = document.createElement('button');
+                    downloadButton.textContent = 'Download Kerangka';
+                    downloadButton.style.marginTop = '10px';
+                    downloadButton.onclick = async () => {
+                        const response = await fetch('/download', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                suggestion: item.suggestion,
+                                long_tails: item.long_tails,
+                                paa: item.paa
+                            })
+                        });
+
+                        const blob = await response.blob();
+                        const link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = `${item.suggestion}.txt`;
+                        link.click();
+                    };
+                    resultsDiv.appendChild(downloadButton);
+                });
+
+                // Add "Download All Results (Single File)" button at the bottom
+                const downloadAllButtonBottom = downloadAllButtonTop.cloneNode(true);
+                resultsDiv.appendChild(downloadAllButtonBottom);
+            } else {
+                resultsDiv.textContent = 'No suggestions found.';
+            }
+        } catch (error) {
+            console.error(error);
+            alert('An error occurred while fetching the data.');
+            spinner.style.display = 'none';
+        }
+    });
+
+    async function downloadAllResults(results) {
+        const spinner = document.getElementById('spinner');
+        spinner.style.display = 'block';
+
+        try {
+            const response = await fetch('/download-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ results })
+            });
+
+            const blob = await response.blob();
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = 'all_results.txt';
+            link.click();
+        } catch (error) {
+            alert('An error occurred while downloading the results.');
+            console.error(error);
+        }
+
+        // Hide spinner after download is triggered
+        spinner.style.display = 'none';
+    }
+</script>
+    
+</body>
+</html>
